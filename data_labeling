@@ -1,0 +1,77 @@
+from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.linear_model import SGDClassifier, LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.model_selection import train_test_split
+import pandas as pd
+import numpy as np
+
+#file_path = '..Data for Python' # insert the file path to your excel file with 2 columns: description and label.
+df = pd.read_excel(file_path, 'Data for Python')
+
+# remove items without label
+df = df[pd.notnull(df['label'])]
+
+# clean the description
+def clean_text(text):
+    text = text.lower() # lowercase text
+    text = text.replace(".", " ")
+    text = text.replace("&", " ")
+    text = text.replace("(", " ")
+    text = text.replace(")", " ")
+    text = text.replace(";", " ")
+    text = text.replace("-", " ")
+    text = text.replace(",", " ")
+    text = text.replace(".", " ")
+    text = text.replace("'", " ")
+
+    return text
+    
+df['description'] = df['description'].apply(clean_text)
+
+#split to train and test
+X = df.description
+y = df.label
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state = 42)
+
+
+def train_and_evaluate(X_train, y_train, X_test, y_test, classifier_type):
+    classifiers = {
+        'naive_bayes': MultinomialNB(),
+        'sgd': SGDClassifier(loss='hinge', penalty='l2', alpha=1e-3, random_state=42, max_iter=5, tol=None),
+        'logistic_regression': LogisticRegression(n_jobs=1, C=1e5)
+    }
+    
+    if classifier_type not in classifiers:
+        raise ValueError("Invalid classifier type. Choose from 'naive_bayes', 'sgd', or 'logistic_regression'.")
+    
+    model = Pipeline([
+        ('vect', CountVectorizer()),
+        ('tfidf', TfidfTransformer()),
+        ('clf', classifiers[classifier_type]),
+    ])
+    
+    # Train model
+    model.fit(X_train, y_train)
+    
+    # Predict
+    y_pred = model.predict(X_test)
+    
+    # Print results
+    print(f'Classifier: {classifier_type}')
+    #print('Accuracy:', accuracy_score(y_pred, y_test))
+    #print(classification_report(y_test, y_pred))
+    
+    # Store results in DataFrame
+    result = pd.DataFrame({'X_test': X_test, 'y_test': y_test, 'y_pred': y_pred})
+    result['success'] = np.where(result['y_test'] == result['y_pred'], 1, 0)
+    
+    success_percentage = result['success'].sum() / len(result['success'])
+    print(f'Percent of success: {success_percentage}')
+    
+    return model, success_percentage, result
+
+logistic_regression_results = train_and_evaluate(X_train, y_train, X_test, y_test, 'logistic_regression')[2]
+sgd_results = train_and_evaluate(X_train, y_train, X_test, y_test, 'sgd')[2]
+naive_bayes_results = train_and_evaluate(X_train, y_train, X_test, y_test, 'naive_bayes')[2]
